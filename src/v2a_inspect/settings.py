@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 
 from pydantic import AliasChoices, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -11,6 +12,8 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("GEMINI_API_KEY", "API_KEY"),
     )
     openrouter_api_key: SecretStr | None = None
+    auth_mode: Literal["disabled", "password"] = "password"
+    auth_allow_self_signup: bool = True
     auth_cookie_key: SecretStr | None = None
     auth_cookie_name: str = "v2a_inspect_cookie"
     auth_cookie_expiry_days: int = Field(default=1, ge=1)
@@ -23,7 +26,6 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=(".env", ".env.secure"),
         env_file_encoding="utf-8",
-        secrets_dir="/run/secrets",
     )
 
     @model_validator(mode="after")
