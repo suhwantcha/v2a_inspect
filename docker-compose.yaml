@@ -10,7 +10,7 @@ services:
       - "8501:8501"
 
     environment:
-      LANGFUSE_BASE_URL: ${LANGFUSE_BASE_URL:-"https://langfuse.riverfog7.com"}
+      LANGFUSE_BASE_URL: ${LANGFUSE_BASE_URL:-https://langfuse.riverfog7.com}
       LANGFUSE_PROMPT_LABEL: ${LANGFUSE_PROMPT_LABEL:-production}
 
       AUTH_MODE: password
