@@ -35,6 +35,7 @@ def require_authentication() -> Any:
             )
             st.stop()
 
+        prepare_initial_signup(credentials_path)
         render_initial_signup(credentials_path)
         st.stop()
 
@@ -103,13 +104,6 @@ def ensure_auth_config_file(credentials_path: Path) -> None:
         cookie["expiry_days"] = cookie_expiry_days
         changed = True
 
-    if not isinstance(config.get("pre-authorized"), dict):
-        config["pre-authorized"] = {"emails": []}
-        changed = True
-    elif "emails" not in config["pre-authorized"]:
-        config["pre-authorized"]["emails"] = []
-        changed = True
-
     if changed or not credentials_path.exists():
         credentials_path.write_text(
             yaml.safe_dump(config, sort_keys=False, allow_unicode=True),
@@ -134,6 +128,21 @@ def has_registered_users(credentials_path: Path) -> bool:
         return False
     usernames = credentials.get("usernames")
     return isinstance(usernames, dict) and bool(usernames)
+
+
+def prepare_initial_signup(credentials_path: Path) -> None:
+    config = load_auth_config(credentials_path)
+    pre_authorized = config.get("pre-authorized")
+    if not isinstance(pre_authorized, dict):
+        return
+
+    emails = pre_authorized.get("emails")
+    if isinstance(emails, list) and not emails:
+        del config["pre-authorized"]
+        credentials_path.write_text(
+            yaml.safe_dump(config, sort_keys=False, allow_unicode=True),
+            encoding="utf-8",
+        )
 
 
 def build_authenticator(credentials_path: Path) -> stauth.Authenticate:
