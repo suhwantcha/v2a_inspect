@@ -1,6 +1,6 @@
 services:
   v2a-inspect:
-    image: ${V2A_INSPECT_IMAGE:-v2a-inspect-ui:latest}
+    image: ${V2A_INSPECT_IMAGE:-ghcr.io/riverfog7/v2a_inspect:latest}
     restart: unless-stopped
 
     ports:
