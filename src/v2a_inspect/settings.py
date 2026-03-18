@@ -2,7 +2,12 @@ from pathlib import Path
 from typing import Literal
 
 from pydantic import AliasChoices, Field, SecretStr, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SecretsSettingsSource,
+    SettingsConfigDict,
+)
 
 
 class Settings(BaseSettings):
@@ -38,6 +43,27 @@ class Settings(BaseSettings):
         env_file=(".env", ".env.secure"),
         env_file_encoding="utf-8",
     )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        sources: list[PydanticBaseSettingsSource] = [
+            init_settings,
+            env_settings,
+            dotenv_settings,
+        ]
+
+        secrets_dir = Path("/run/secrets")
+        if secrets_dir.is_dir():
+            sources.append(SecretsSettingsSource(settings_cls, secrets_dir=secrets_dir))
+
+        return tuple(sources)
 
     @model_validator(mode="after")
     def validate_api_keys(self) -> "Settings":

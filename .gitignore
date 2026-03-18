@@ -262,6 +262,7 @@ celerybeat.pid
 .env
 .env.secure
 .venv
+secrets/
 env/
 venv/
 ENV/

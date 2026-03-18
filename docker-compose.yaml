@@ -1,0 +1,54 @@
+services:
+  v2a-inspect:
+    image: ${V2A_INSPECT_IMAGE:-v2a-inspect-ui:latest}
+    restart: unless-stopped
+
+    ports:
+      - "8501:8501"
+
+    environment:
+      LANGFUSE_BASE_URL: ${LANGFUSE_BASE_URL:-}
+      LANGFUSE_PROMPT_LABEL: ${LANGFUSE_PROMPT_LABEL:-production}
+
+      AUTH_MODE: password
+      AUTH_CREDENTIALS_PATH: /data/credentials.yaml
+
+      PROMPT_BACKEND: langfuse
+
+      STREAMLIT_SERVER_HEADLESS: "true"
+      STREAMLIT_BROWSER_GATHER_USAGE_STATS: "false"
+
+    secrets:
+      - gemini_api_key
+      - langfuse_public_key
+      - langfuse_secret_key
+      - auth_cookie_key
+
+    volumes:
+      - v2a_inspect_data:/data
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health').read()",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  v2a_inspect_data:
+
+secrets:
+  gemini_api_key:
+    file: ${GEMINI_API_KEY_SECRET_FILE:-./secrets/gemini_api_key}
+  langfuse_public_key:
+    file: ${LANGFUSE_PUBLIC_KEY_SECRET_FILE:-./secrets/langfuse_public_key}
+  langfuse_secret_key:
+    file: ${LANGFUSE_SECRET_KEY_SECRET_FILE:-./secrets/langfuse_secret_key}
+  auth_cookie_key:
+    file: ${AUTH_COOKIE_KEY_SECRET_FILE:-./secrets/auth_cookie_key}
