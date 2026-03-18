@@ -1,14 +1,16 @@
-from __future__ import annotations
-
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, Literal, Sequence, cast
 
 import google.genai as genai
 from langchain_core.language_models import BaseChatModel
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.runtime import Runtime
+
+from v2a_inspect.observability import start_observation
 
 from v2a_inspect.pipeline.nodes import (
     analyze_scenes,
@@ -150,63 +152,82 @@ def build_inspect_graph(
 def _upload_node(
     state: InspectState,
     runtime: Runtime[InspectRuntime],
+    config: RunnableConfig | None = None,
 ) -> dict[str, object]:
     return _run_node(
         "upload",
+        state,
         lambda: upload_video(state, genai_client=runtime.context.genai_client),
     )
 
 
-def _bootstrap_node(state: InspectState) -> dict[str, object]:
-    return cast(dict[str, object], state)
+def _bootstrap_node(
+    state: InspectState,
+    config: RunnableConfig | None = None,
+) -> dict[str, object]:
+    return _run_node("bootstrap", state, lambda: cast(dict[str, object], state))
 
 
 def _analyze_node(
     state: InspectState,
     runtime: Runtime[InspectRuntime],
+    config: RunnableConfig | None = None,
 ) -> dict[str, object]:
     return _run_node(
         "analyze",
-        lambda: analyze_scenes(state, llm=runtime.context.llm),
+        state,
+        lambda: analyze_scenes(state, llm=runtime.context.llm, config=config),
     )
 
 
-def _extract_node(state: InspectState) -> dict[str, object]:
-    return _run_node("extract", lambda: extract_raw_tracks(state))
+def _extract_node(
+    state: InspectState,
+    config: RunnableConfig | None = None,
+) -> dict[str, object]:
+    return _run_node("extract", state, lambda: extract_raw_tracks(state))
 
 
 def _group_node(
     state: InspectState,
     runtime: Runtime[InspectRuntime],
+    config: RunnableConfig | None = None,
 ) -> dict[str, object]:
     return _run_node(
         "group",
-        lambda: group_tracks(state, llm=runtime.context.llm),
+        state,
+        lambda: group_tracks(state, llm=runtime.context.llm, config=config),
     )
 
 
 def _verify_node(
     state: InspectState,
     runtime: Runtime[InspectRuntime],
+    config: RunnableConfig | None = None,
 ) -> dict[str, object]:
     return _run_node(
         "verify",
-        lambda: verify_groups(state, llm=runtime.context.llm),
+        state,
+        lambda: verify_groups(state, llm=runtime.context.llm, config=config),
     )
 
 
 def _select_model_node(
     state: InspectState,
     runtime: Runtime[InspectRuntime],
+    config: RunnableConfig | None = None,
 ) -> dict[str, object]:
     return _run_node(
         "select_model",
-        lambda: select_models(state, llm=runtime.context.llm),
+        state,
+        lambda: select_models(state, llm=runtime.context.llm, config=config),
     )
 
 
-def _assemble_node(state: InspectState) -> dict[str, object]:
-    return _run_node("assemble", lambda: assemble_grouped_analysis(state))
+def _assemble_node(
+    state: InspectState,
+    config: RunnableConfig | None = None,
+) -> dict[str, object]:
+    return _run_node("assemble", state, lambda: assemble_grouped_analysis(state))
 
 
 def _route_after_group(
@@ -263,9 +284,97 @@ def _requires_video_context(state: InspectState) -> bool:
 
 def _run_node(
     node_name: str,
+    state: InspectState,
     action: Callable[[], dict[str, object]],
 ) -> dict[str, object]:
-    try:
-        return action()
-    except Exception as exc:  # noqa: BLE001
-        raise RuntimeError(f"inspect graph failed in '{node_name}': {exc}") from exc
+    with start_observation(
+        name=f"graph.{node_name}",
+        as_type="span",
+        input=_summarize_node_input(node_name, state),
+        metadata={"node": node_name},
+    ) as node_observation:
+        try:
+            result = action()
+        except Exception as exc:  # noqa: BLE001
+            if node_observation is not None:
+                node_observation.update(
+                    output={"error": str(exc)},
+                    level="ERROR",
+                    status_message=str(exc),
+                )
+            raise RuntimeError(f"inspect graph failed in '{node_name}': {exc}") from exc
+
+        if node_observation is not None:
+            node_observation.update(output=_summarize_node_output(node_name, result))
+        return result
+
+
+def _summarize_node_input(node_name: str, state: InspectState) -> dict[str, object]:
+    options = state.get("options")
+    video_path = state.get("video_path")
+    base: dict[str, object] = {
+        "node": node_name,
+        "video_name": Path(video_path).name if video_path else None,
+    }
+    if node_name == "upload":
+        if options is not None:
+            base.update(
+                {
+                    "upload_timeout_seconds": options.upload_timeout_seconds,
+                    "poll_interval_seconds": options.poll_interval_seconds,
+                }
+            )
+    elif node_name == "analyze":
+        if options is not None:
+            base.update(
+                {
+                    "fps": options.fps,
+                    "scene_analysis_mode": options.scene_analysis_mode,
+                    "gemini_model": options.gemini_model,
+                }
+            )
+    elif node_name == "extract":
+        scene_analysis = state.get("scene_analysis")
+        base["scene_count"] = len(scene_analysis.scenes) if scene_analysis else 0
+    elif node_name in {"group", "assemble"}:
+        base["raw_track_count"] = len(state.get("raw_tracks", []))
+    elif node_name in {"verify", "select_model"}:
+        base["candidate_group_count"] = _count_active_groups(state)
+        base["has_gemini_file"] = state.get("gemini_file") is not None
+    else:
+        base["state_keys"] = sorted(state.keys())
+    return base
+
+
+def _summarize_node_output(
+    node_name: str,
+    result: dict[str, object],
+) -> dict[str, object]:
+    summary: dict[str, object] = {
+        "node": node_name,
+        "updated_keys": sorted(result.keys()),
+    }
+    if "scene_analysis" in result:
+        scene_analysis = cast(VideoSceneAnalysis, result["scene_analysis"])
+        summary["scene_count"] = len(scene_analysis.scenes)
+    if "raw_tracks" in result:
+        summary["raw_track_count"] = len(cast(list[object], result["raw_tracks"]))
+    if "text_groups" in result:
+        summary["text_group_count"] = len(cast(list[object], result["text_groups"]))
+    if "verified_groups" in result:
+        summary["verified_group_count"] = len(
+            cast(list[object], result["verified_groups"])
+        )
+    if "final_groups" in result:
+        summary["final_group_count"] = len(cast(list[object], result["final_groups"]))
+    if "grouped_analysis" in result:
+        summary["grouped_analysis_ready"] = result.get("grouped_analysis") is not None
+    return summary
+
+
+def _count_active_groups(state: InspectState) -> int:
+    for key in ("final_groups", "verified_groups", "text_groups"):
+        groups = state.get(key)
+        if groups is not None:
+            return len(groups)
+    return 0

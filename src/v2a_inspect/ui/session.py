@@ -6,6 +6,7 @@ import shutil
 import tempfile
 import threading
 import time
+from uuid import uuid4
 
 import streamlit as st
 
@@ -26,6 +27,8 @@ def initialize_session_state() -> None:
             st.session_state[key] = None
     if "model_overrides" not in st.session_state:
         st.session_state["model_overrides"] = {}
+    if "langfuse_session_id" not in st.session_state:
+        st.session_state["langfuse_session_id"] = uuid4().hex
 
 
 def reset_state() -> None:
@@ -47,6 +50,14 @@ def reset_state() -> None:
 def ensure_process_resources() -> None:
     cleanup_stale_temp()
     start_cleanup_thread()
+
+
+def get_langfuse_session_id() -> str:
+    session_id = st.session_state.get("langfuse_session_id")
+    if not session_id:
+        session_id = uuid4().hex
+        st.session_state["langfuse_session_id"] = session_id
+    return session_id
 
 
 @st.cache_resource

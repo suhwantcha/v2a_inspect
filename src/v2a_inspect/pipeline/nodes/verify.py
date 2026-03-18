@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from langchain_core.language_models import BaseChatModel
+from langchain_core.runnables import RunnableConfig
 
 from v2a_inspect.workflows.state import InspectState
 
-from ..prompt_templates import VLM_VERIFY_PROMPT_TEMPLATE
+from ..prompt_templates import resolve_prompt
 from ..response_models import TrackGroup, VLMVerifyResponse
 from ._shared import (
     append_state_message,
@@ -14,7 +15,12 @@ from ._shared import (
 )
 
 
-def verify_groups(state: InspectState, *, llm: BaseChatModel) -> dict[str, object]:
+def verify_groups(
+    state: InspectState,
+    *,
+    llm: BaseChatModel,
+    config: RunnableConfig | None = None,
+) -> dict[str, object]:
     """Use Gemini VLM to confirm or split multi-member track groups."""
 
     options = state.get("options")
@@ -70,7 +76,7 @@ def verify_groups(state: InspectState, *, llm: BaseChatModel) -> dict[str, objec
             updated_groups.append(group)
             continue
 
-        prompt = VLM_VERIFY_PROMPT_TEMPLATE.format(
+        resolved_prompt = resolve_prompt("vlm_verify").render(
             canonical_description=group.canonical_description,
             segment_list=build_verify_segment_list(group, tracks_by_id),
         )
@@ -80,12 +86,13 @@ def verify_groups(state: InspectState, *, llm: BaseChatModel) -> dict[str, objec
                 llm,
                 file_obj=gemini_file,
                 fps=options.fps,
-                prompt=prompt,
+                prompt=resolved_prompt,
                 schema=VLMVerifyResponse,
                 model=options.gemini_model,
                 timeout_ms=options.video_timeout_ms,
                 max_retries=options.max_retries,
                 label=f"vlm_verify_{group.group_id}",
+                config=config,
             )
         except Exception as exc:  # noqa: BLE001
             warnings.append(

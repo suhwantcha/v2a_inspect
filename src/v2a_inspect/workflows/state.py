@@ -41,6 +41,8 @@ class InspectState(TypedDict, total=False):
     verified_groups: list[TrackGroup]
     final_groups: list[TrackGroup]
     grouped_analysis: GroupedAnalysis
+    trace_id: str
+    root_observation_id: str
     errors: list[str]
     warnings: list[str]
     progress_messages: list[str]

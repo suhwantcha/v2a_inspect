@@ -3,8 +3,9 @@ from __future__ import annotations
 from typing import Literal
 
 from langchain_core.language_models import BaseChatModel
+from langchain_core.runnables import RunnableConfig
 
-from ..prompt_templates import MODEL_SELECT_PROMPT_TEMPLATE
+from ..prompt_templates import resolve_prompt
 from ..response_models import (
     ModelSelectResponse,
     ModelSelection,
@@ -19,7 +20,12 @@ from ._shared import (
 )
 
 
-def select_models(state: InspectState, *, llm: BaseChatModel) -> dict[str, object]:
+def select_models(
+    state: InspectState,
+    *,
+    llm: BaseChatModel,
+    config: RunnableConfig | None = None,
+) -> dict[str, object]:
     """Assign TTA or VTA preferences to track groups and member tracks."""
 
     options = state.get("options")
@@ -76,7 +82,7 @@ def select_models(state: InspectState, *, llm: BaseChatModel) -> dict[str, objec
             group.model_selection = background_selection
             continue
 
-        prompt = MODEL_SELECT_PROMPT_TEMPLATE.format(
+        resolved_prompt = resolve_prompt("model_select").render(
             segment_list=build_model_select_segment_list(member_tracks)
         )
 
@@ -85,12 +91,13 @@ def select_models(state: InspectState, *, llm: BaseChatModel) -> dict[str, objec
                 llm,
                 file_obj=gemini_file,
                 fps=options.fps,
-                prompt=prompt,
+                prompt=resolved_prompt,
                 schema=ModelSelectResponse,
                 model=options.gemini_model,
                 timeout_ms=options.video_timeout_ms,
                 max_retries=options.max_retries,
                 label=f"model_select_{group.group_id}",
+                config=config,
             )
         except Exception as exc:  # noqa: BLE001
             warnings.append(

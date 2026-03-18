@@ -1,25 +1,32 @@
 from __future__ import annotations
 
 import argparse
+import getpass
 import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Sequence
+from typing import Mapping, Sequence
 
+from v2a_inspect.observability import build_cli_trace_context, flush_langfuse
 from v2a_inspect.pipeline.response_models import GroupedAnalysis, VideoSceneAnalysis
+from v2a_inspect.pipeline.prompt_templates import sync_prompts
 from v2a_inspect.runner import (
     get_grouped_analysis,
     run_group_from_scene_analysis,
     run_inspect,
 )
+from v2a_inspect.settings import settings
 from v2a_inspect.workflows import InspectOptions
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
-    return args.func(args)
+    try:
+        return args.func(args)
+    finally:
+        flush_langfuse()
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -60,6 +67,25 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Write GroupedAnalysis JSON to this path instead of stdout",
     )
     group_parser.set_defaults(func=_run_group_command)
+
+    prompts_parser = subparsers.add_parser(
+        "prompts",
+        help="Manage Langfuse prompt definitions",
+    )
+    prompts_subparsers = prompts_parser.add_subparsers(
+        dest="prompts_command",
+        required=True,
+    )
+    sync_parser = prompts_subparsers.add_parser(
+        "sync",
+        help="Sync local prompts to Langfuse prompt management",
+    )
+    sync_parser.add_argument(
+        "--label",
+        default=settings.langfuse_prompt_label,
+        help="Langfuse label to assign to synced prompts",
+    )
+    sync_parser.set_defaults(func=_run_prompt_sync_command)
 
     ui_parser = subparsers.add_parser(
         "ui",
@@ -150,12 +176,25 @@ def _add_common_runtime_arguments(
 
 def _run_analyze_command(args: argparse.Namespace) -> int:
     options = _build_analyze_options(args)
+    trace_context = build_cli_trace_context(
+        "analyze",
+        user_id=_resolve_cli_user(),
+        metadata={
+            "video_path": args.video_path,
+            "output_path": args.output,
+            "scene_analysis_mode": options.scene_analysis_mode,
+            "fps": options.fps,
+        },
+        tags=_build_runtime_tags(options),
+    )
     state = run_inspect(
         args.video_path,
         options=options,
         progress_callback=_print_progress,
         warning_callback=_print_warning,
+        trace_context=trace_context,
     )
+    _print_trace_id(state)
     _write_grouped_analysis_json(get_grouped_analysis(state), output_path=args.output)
     return 0
 
@@ -170,14 +209,37 @@ def _run_group_command(args: argparse.Namespace) -> int:
         )
 
     scene_analysis = _load_scene_analysis(args.scene_analysis_path)
+    trace_context = build_cli_trace_context(
+        "group",
+        user_id=_resolve_cli_user(),
+        metadata={
+            "scene_analysis_path": args.scene_analysis_path,
+            "video_path": args.video_path,
+            "output_path": args.output,
+            "fps": options.fps,
+        },
+        tags=_build_runtime_tags(options),
+    )
     state = run_group_from_scene_analysis(
         scene_analysis,
         options=options,
         video_path=args.video_path or "",
         progress_callback=_print_progress,
         warning_callback=_print_warning,
+        trace_context=trace_context,
     )
+    _print_trace_id(state)
     _write_grouped_analysis_json(get_grouped_analysis(state), output_path=args.output)
+    return 0
+
+
+def _run_prompt_sync_command(args: argparse.Namespace) -> int:
+    synced_prompts = sync_prompts(label=args.label)
+    for prompt in synced_prompts:
+        print(
+            f"Synced prompt '{prompt.name}' to Langfuse with label '{args.label}'.",
+            file=sys.stderr,
+        )
     return 0
 
 
@@ -262,3 +324,25 @@ def _print_progress(message: str) -> None:
 
 def _print_warning(message: str) -> None:
     print(f"[warning] {message}", file=sys.stderr)
+
+
+def _print_trace_id(state: Mapping[str, object]) -> None:
+    trace_id = state.get("trace_id")
+    if trace_id:
+        print(f"[trace] {trace_id}", file=sys.stderr)
+
+
+def _build_runtime_tags(options: InspectOptions) -> list[str]:
+    tags: list[str] = []
+    if options.enable_vlm_verify:
+        tags.append("vlm-verify")
+    if options.enable_model_select:
+        tags.append("model-select")
+    return tags
+
+
+def _resolve_cli_user() -> str:
+    try:
+        return getpass.getuser()
+    except Exception:  # noqa: BLE001
+        return "unknown-user"

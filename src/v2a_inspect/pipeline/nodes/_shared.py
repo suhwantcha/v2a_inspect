@@ -3,15 +3,14 @@ from __future__ import annotations
 from typing import Any, Literal, TypeVar
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel
 
+from v2a_inspect.observability import start_observation
 from v2a_inspect.clients import build_uploaded_video_content_block
 
-from ..prompt_templates import (
-    SCENE_ANALYSIS_DEFAULT_PROMPT_TEMPLATE,
-    SCENE_ANALYSIS_EXTENDED_PROMPT_TEMPLATE,
-)
+from ..prompt_templates import ResolvedPrompt, resolve_prompt
 from ..response_models import RawTrack, TrackGroup
 from v2a_inspect.workflows.state import InspectOptions, InspectState
 
@@ -26,23 +25,38 @@ def append_state_message(
     return [*state.get(key, []), message]
 
 
-def get_scene_analysis_prompt(options: InspectOptions) -> str:
+def get_scene_analysis_prompt(options: InspectOptions) -> ResolvedPrompt:
     if options.scene_analysis_mode == "extended":
-        return SCENE_ANALYSIS_EXTENDED_PROMPT_TEMPLATE
-    return SCENE_ANALYSIS_DEFAULT_PROMPT_TEMPLATE
+        return resolve_prompt("scene_analysis_extended")
+    return resolve_prompt("scene_analysis_default")
 
 
-def build_text_message(prompt: str) -> HumanMessage:
-    return HumanMessage(content=[{"type": "text", "text": prompt}])
+def build_text_messages(prompt: ResolvedPrompt) -> list[BaseMessage]:
+    messages: list[BaseMessage] = []
+    if prompt.system_text.strip():
+        messages.append(SystemMessage(content=prompt.system_text))
+    messages.append(HumanMessage(content=[{"type": "text", "text": prompt.user_text}]))
+    return messages
 
 
-def build_video_message(file_obj: Any, *, fps: float, prompt: str) -> HumanMessage:
-    return HumanMessage(
-        content=[
-            {"type": "text", "text": prompt},
-            build_uploaded_video_content_block(file_obj, fps=fps),
-        ]
+def build_video_messages(
+    file_obj: Any,
+    *,
+    fps: float,
+    prompt: ResolvedPrompt,
+) -> list[BaseMessage]:
+    messages: list[BaseMessage] = []
+    if prompt.system_text.strip():
+        messages.append(SystemMessage(content=prompt.system_text))
+    messages.append(
+        HumanMessage(
+            content=[
+                {"type": "text", "text": prompt.user_text},
+                build_uploaded_video_content_block(file_obj, fps=fps),
+            ]
+        )
     )
+    return messages
 
 
 def configure_llm(
@@ -79,21 +93,24 @@ def configure_llm(
 def invoke_structured_text(
     llm: BaseChatModel,
     *,
-    prompt: str,
+    prompt: ResolvedPrompt,
     schema: type[T],
     model: str | None = None,
     timeout_ms: int | None = None,
     max_retries: int | None = None,
     label: str = "",
+    config: RunnableConfig | None = None,
 ) -> T:
     return _invoke_structured(
         llm=llm,
-        message=build_text_message(prompt),
+        messages=build_text_messages(prompt),
+        prompt=prompt,
         schema=schema,
         model=model,
         timeout_ms=timeout_ms,
         max_retries=max_retries,
         label=label,
+        config=config,
     )
 
 
@@ -102,33 +119,38 @@ def invoke_structured_video(
     *,
     file_obj: Any,
     fps: float,
-    prompt: str,
+    prompt: ResolvedPrompt,
     schema: type[T],
     model: str | None = None,
     timeout_ms: int | None = None,
     max_retries: int | None = None,
     label: str = "",
+    config: RunnableConfig | None = None,
 ) -> T:
     return _invoke_structured(
         llm=llm,
-        message=build_video_message(file_obj, fps=fps, prompt=prompt),
+        messages=build_video_messages(file_obj, fps=fps, prompt=prompt),
+        prompt=prompt,
         schema=schema,
         model=model,
         timeout_ms=timeout_ms,
         max_retries=max_retries,
         label=label,
+        config=config,
     )
 
 
 def _invoke_structured(
     llm: BaseChatModel,
     *,
-    message: HumanMessage,
+    messages: list[BaseMessage],
+    prompt: ResolvedPrompt,
     schema: type[T],
     model: str | None = None,
     timeout_ms: int | None = None,
     max_retries: int | None = None,
     label: str = "",
+    config: RunnableConfig | None = None,
 ) -> T:
     configured_llm = configure_llm(
         llm,
@@ -140,12 +162,43 @@ def _invoke_structured(
         schema,
         method="json_schema",
     )
+    span_name = f"llm.{label}" if label else f"llm.{schema.__name__.lower()}"
 
-    try:
-        result = structured_llm.invoke([message])
-    except Exception as exc:  # noqa: BLE001
-        error_label = f" for {label}" if label else ""
-        raise RuntimeError(f"LLM request failed{error_label}: {exc}") from exc
+    with start_observation(
+        name=span_name,
+        as_type="chain",
+        input={
+            "label": label or schema.__name__,
+            "schema": schema.__name__,
+            "prompt_name": prompt.name,
+        },
+        metadata={
+            "schema": schema.__name__,
+            "prompt_name": prompt.name,
+        },
+        prompt=prompt.langfuse_prompt,
+        model=getattr(configured_llm, "model", None),
+    ) as request_observation:
+        try:
+            result = structured_llm.invoke(messages, config=config)
+        except Exception as exc:  # noqa: BLE001
+            if request_observation is not None:
+                request_observation.update(
+                    output={"error": str(exc)},
+                    level="ERROR",
+                    status_message=str(exc),
+                )
+            error_label = f" for {label}" if label else ""
+            raise RuntimeError(f"LLM request failed{error_label}: {exc}") from exc
+
+        if request_observation is not None:
+            request_observation.update(
+                output={
+                    "schema": schema.__name__,
+                    "label": label or schema.__name__,
+                    "result_type": type(result).__name__,
+                }
+            )
 
     if isinstance(result, schema):
         return result

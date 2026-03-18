@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from langchain_core.language_models import BaseChatModel
+from langchain_core.runnables import RunnableConfig
 
-from ..prompt_templates import GROUPING_PROMPT_TEMPLATE
+from ..prompt_templates import resolve_prompt
 from ..response_models import (
     GroupingResponse,
     TrackGroup,
@@ -16,7 +17,12 @@ from ._shared import (
 )
 
 
-def group_tracks(state: InspectState, *, llm: BaseChatModel) -> dict[str, object]:
+def group_tracks(
+    state: InspectState,
+    *,
+    llm: BaseChatModel,
+    config: RunnableConfig | None = None,
+) -> dict[str, object]:
     """Group raw tracks by sound similarity using Gemini text analysis."""
 
     options = state.get("options")
@@ -38,7 +44,7 @@ def group_tracks(state: InspectState, *, llm: BaseChatModel) -> dict[str, object
             ),
         }
 
-    prompt = GROUPING_PROMPT_TEMPLATE.format(
+    resolved_prompt = resolve_prompt("grouping").render(
         numbered_list=build_grouping_numbered_list(raw_tracks)
     )
     warnings = list(state.get("warnings", []))
@@ -46,12 +52,13 @@ def group_tracks(state: InspectState, *, llm: BaseChatModel) -> dict[str, object
     try:
         response = invoke_structured_text(
             llm,
-            prompt=prompt,
+            prompt=resolved_prompt,
             schema=GroupingResponse,
             model=options.gemini_model,
             timeout_ms=options.text_timeout_ms,
             max_retries=options.max_retries,
             label="text_grouping",
+            config=config,
         )
     except Exception as exc:  # noqa: BLE001
         response = GroupingResponse()

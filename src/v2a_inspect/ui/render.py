@@ -4,6 +4,7 @@ from typing import Any, Literal, cast
 
 import streamlit as st
 
+from v2a_inspect.observability import build_score_id, create_trace_score
 from v2a_inspect.pipeline.response_models import (
     GroupedAnalysis,
     RawTrack,
@@ -113,6 +114,7 @@ def render_results(
     st.header("Step 2: 분석 결과 요약")
 
     _render_state_messages(inspect_state)
+    _render_langfuse_summary(inspect_state)
 
     n_scenes = len(scene_analysis.scenes)
     n_backgrounds = n_scenes
@@ -203,6 +205,7 @@ def render_results(
             members=members,
             video_path=video_path,
             clip_dir=clip_dir,
+            trace_id=inspect_state.get("trace_id") if inspect_state else None,
         )
 
 
@@ -237,6 +240,7 @@ def _render_group_expander(
     members: list[RawTrack],
     video_path: str,
     clip_dir: str,
+    trace_id: str | None,
 ) -> None:
     if not members:
         st.warning("이 그룹에 표시할 멤버 트랙이 없습니다.")
@@ -290,6 +294,12 @@ def _render_group_expander(
             )
             if override != current_override:
                 st.session_state.model_overrides[group.group_id] = override
+
+            _render_group_review_controls(
+                trace_id=trace_id,
+                group=group,
+                override=override,
+            )
 
         st.markdown("---")
 
@@ -363,3 +373,128 @@ def _render_track_clip(track: RawTrack, *, video_path: str, clip_dir: str) -> No
         st.video(clip_path)
     else:
         st.warning("영상 클립 추출 실패")
+
+
+def _render_langfuse_summary(inspect_state: InspectState | None) -> None:
+    if inspect_state is None:
+        return
+
+    trace_id = inspect_state.get("trace_id")
+    if not trace_id:
+        return
+
+    st.caption(f"Langfuse trace id: `{trace_id}`")
+    with st.expander("🧪 Langfuse Review", expanded=False):
+        quality_key = "langfuse_overall_grouping_quality"
+        approval_key = "langfuse_approved_for_export"
+        quality_score = st.slider(
+            "Overall grouping quality",
+            min_value=1,
+            max_value=5,
+            value=int(st.session_state.get(quality_key, 3)),
+            key=quality_key,
+        )
+        approved = st.checkbox(
+            "Approved for export",
+            value=bool(st.session_state.get(approval_key, False)),
+            key=approval_key,
+        )
+
+        col_left, col_right = st.columns(2)
+        with col_left:
+            if st.button("Save overall score", key="langfuse_save_overall_score"):
+                success = create_trace_score(
+                    trace_id=trace_id,
+                    name="overall_grouping_quality",
+                    value=float(quality_score),
+                    data_type="NUMERIC",
+                    score_id=build_score_id(trace_id, "overall_grouping_quality"),
+                    metadata={"scale": "1-5"},
+                    flush=True,
+                )
+                if success:
+                    st.success("Saved overall grouping score to Langfuse.")
+                else:
+                    st.warning("Langfuse is not configured, so the score was not sent.")
+
+        with col_right:
+            if st.button("Save approval", key="langfuse_save_approval"):
+                success = create_trace_score(
+                    trace_id=trace_id,
+                    name="approved_for_export",
+                    value=1.0 if approved else 0.0,
+                    data_type="BOOLEAN",
+                    score_id=build_score_id(trace_id, "approved_for_export"),
+                    metadata={"approved": approved},
+                    flush=True,
+                )
+                if success:
+                    st.success("Saved export approval to Langfuse.")
+                else:
+                    st.warning("Langfuse is not configured, so the score was not sent.")
+
+
+def _render_group_review_controls(
+    *,
+    trace_id: str | None,
+    group: TrackGroup,
+    override: str,
+) -> None:
+    if not trace_id:
+        return
+
+    review_value = st.selectbox(
+        "그룹 리뷰",
+        ["(미기록)", "correct", "overmerged", "oversplit", "unclear"],
+        key=f"langfuse_group_review_{group.group_id}",
+    )
+
+    if st.button(
+        "Langfuse에 그룹 리뷰 기록",
+        key=f"langfuse_save_group_review_{group.group_id}",
+    ):
+        if review_value == "(미기록)":
+            st.warning("기록할 그룹 리뷰 값을 먼저 선택해주세요.")
+        else:
+            success = create_trace_score(
+                trace_id=trace_id,
+                name="group_review",
+                value=review_value,
+                data_type="CATEGORICAL",
+                score_id=build_score_id(trace_id, "group_review", group.group_id),
+                metadata={
+                    "group_id": group.group_id,
+                    "member_ids": group.member_ids,
+                },
+                flush=True,
+            )
+            if success:
+                st.success(f"Saved group review for {group.group_id}.")
+            else:
+                st.warning("Langfuse is not configured, so the score was not sent.")
+
+    if override != "(자동)" and st.button(
+        "Langfuse에 오버라이드 기록",
+        key=f"langfuse_save_model_override_{group.group_id}",
+    ):
+        success = create_trace_score(
+            trace_id=trace_id,
+            name="model_override",
+            value=override,
+            data_type="CATEGORICAL",
+            score_id=build_score_id(trace_id, "model_override", group.group_id),
+            metadata={
+                "group_id": group.group_id,
+                "auto_model": (
+                    group.model_selection.model_type
+                    if group.model_selection is not None
+                    else None
+                ),
+                "override": override,
+            },
+            flush=True,
+        )
+        if success:
+            st.success(f"Saved model override for {group.group_id}.")
+        else:
+            st.warning("Langfuse is not configured, so the score was not sent.")

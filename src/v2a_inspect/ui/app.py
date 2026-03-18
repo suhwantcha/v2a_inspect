@@ -6,6 +6,7 @@ from pathlib import Path
 
 import streamlit as st
 
+from v2a_inspect.observability import WorkflowTraceContext
 from v2a_inspect.runner import get_grouped_analysis, run_inspect
 from v2a_inspect.settings import settings
 from v2a_inspect.ui.auth import require_authentication
@@ -18,6 +19,7 @@ from v2a_inspect.ui.render import (
 from v2a_inspect.ui.session import (
     ensure_process_resources,
     get_analysis_semaphore,
+    get_langfuse_session_id,
     initialize_session_state,
     reset_state,
 )
@@ -121,6 +123,7 @@ def run_analysis(video_path: str, options: InspectOptions) -> None:
                     options=options,
                     progress_callback=status.write,
                     warning_callback=lambda message: status.write(f"⚠️ {message}"),
+                    trace_context=_build_ui_trace_context(options),
                 )
                 scene_analysis = state.get("scene_analysis")
                 if scene_analysis is None:
@@ -156,6 +159,28 @@ def run_analysis(video_path: str, options: InspectOptions) -> None:
                 st.code(traceback.format_exc())
     finally:
         semaphore.release()
+
+
+def _build_ui_trace_context(options: InspectOptions) -> WorkflowTraceContext:
+    username = st.session_state.get("username")
+    tags: list[str] = []
+    if options.enable_vlm_verify:
+        tags.append("vlm-verify")
+    if options.enable_model_select:
+        tags.append("model-select")
+
+    return WorkflowTraceContext(
+        source="ui",
+        operation="analyze",
+        user_id=str(username) if username else None,
+        session_id=get_langfuse_session_id(),
+        tags=tuple(tags),
+        metadata={
+            "scene_analysis_mode": options.scene_analysis_mode,
+            "fps": options.fps,
+            "auth_mode": settings.auth_mode,
+        },
+    )
 
 
 if __name__ == "__main__":
