@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import json
 import shutil
 import subprocess
 import sys
@@ -120,6 +121,58 @@ def _add_analyze_option_arguments(
         action=argparse.BooleanOptionalAction,
         default=defaults.enable_model_select,
         dest="enable_model_select",
+    )
+    # ── Phase 1: Director Intent + Audio Plan ──────────────────────────────────
+    parser.add_argument(
+        "--director-intent",
+        action=argparse.BooleanOptionalAction,
+        default=defaults.enable_director_intent,
+        dest="enable_director_intent",
+        help="Enable Director Intent extraction (top-down emotional arc).",
+    )
+    parser.add_argument(
+        "--audio-plan",
+        action=argparse.BooleanOptionalAction,
+        default=defaults.enable_audio_plan,
+        dest="enable_audio_plan",
+        help="Enable unified Audio Plan generation.",
+    )
+    parser.add_argument(
+        "--silence-pad",
+        type=float,
+        default=defaults.silence_pre_key_moment_sec,
+        dest="silence_pre_key_moment_sec",
+        help="Seconds of silence to insert before key emotional moments.",
+    )
+    # ── Phase 2: Relation Graph ────────────────────────────────────────────────
+    parser.add_argument(
+        "--relation-graph",
+        action=argparse.BooleanOptionalAction,
+        default=defaults.enable_relation_graph,
+        dest="enable_relation_graph",
+        help="Enable Lightweight Relation Graph (causes/ducks edges + causal generation order).",
+    )
+    # ── Phase 3: Evaluation + Refinement (off by default) ───────────────────────
+    parser.add_argument(
+        "--evaluation",
+        action=argparse.BooleanOptionalAction,
+        default=defaults.enable_evaluation,
+        dest="enable_evaluation",
+        help="Enable mid-level evaluation + self-refinement loop (default: off).",
+    )
+    parser.add_argument(
+        "--max-refinement-iter",
+        type=int,
+        default=defaults.max_refinement_iter,
+        dest="max_refinement_iter",
+        help="Maximum number of refinement iterations (default: 2).",
+    )
+    parser.add_argument(
+        "--eval-threshold",
+        type=float,
+        default=defaults.eval_score_threshold,
+        dest="eval_score_threshold",
+        help="Evaluation score threshold to pass without refinement (default: 0.75).",
     )
     _add_common_runtime_arguments(parser, defaults=defaults)
 
@@ -275,6 +328,13 @@ def _build_analyze_options(args: argparse.Namespace) -> InspectOptions:
         scene_analysis_mode=args.scene_analysis_mode,
         enable_vlm_verify=args.enable_vlm_verify,
         enable_model_select=args.enable_model_select,
+        enable_director_intent=args.enable_director_intent,
+        enable_audio_plan=args.enable_audio_plan,
+        silence_pre_key_moment_sec=args.silence_pre_key_moment_sec,
+        enable_relation_graph=args.enable_relation_graph,
+        enable_evaluation=args.enable_evaluation,
+        max_refinement_iter=args.max_refinement_iter,
+        eval_score_threshold=args.eval_score_threshold,
         gemini_model=args.gemini_model,
         upload_timeout_seconds=args.upload_timeout_seconds,
         text_timeout_ms=args.text_timeout_ms,
@@ -301,6 +361,12 @@ def _build_group_options(args: argparse.Namespace) -> InspectOptions:
 
 def _load_scene_analysis(scene_analysis_path: str) -> VideoSceneAnalysis:
     payload = Path(scene_analysis_path).read_text(encoding="utf-8")
+    try:
+        data = json.loads(payload)
+        if isinstance(data, dict) and "scene_analysis" in data:
+            return VideoSceneAnalysis.model_validate(data["scene_analysis"])
+    except Exception:
+        pass
     return VideoSceneAnalysis.model_validate_json(payload)
 
 
@@ -338,6 +404,14 @@ def _build_runtime_tags(options: InspectOptions) -> list[str]:
         tags.append("vlm-verify")
     if options.enable_model_select:
         tags.append("model-select")
+    if options.enable_director_intent:
+        tags.append("director-intent")
+    if options.enable_audio_plan:
+        tags.append("audio-plan")
+    if options.enable_relation_graph:
+        tags.append("relation-graph")
+    if options.enable_evaluation:
+        tags.append("evaluation")
     return tags
 
 

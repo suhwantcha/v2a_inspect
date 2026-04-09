@@ -23,7 +23,7 @@ def group_tracks(
     llm: BaseChatModel,
     config: RunnableConfig | None = None,
 ) -> dict[str, object]:
-    """Group raw tracks by sound similarity using Gemini text analysis."""
+    """Group Local raw tracks by sound similarity using Gemini text analysis. Pass Global tracks directly."""
 
     options = state.get("options")
     if options is None:
@@ -44,10 +44,49 @@ def group_tracks(
             ),
         }
 
-    resolved_prompt = resolve_prompt("grouping").render(
-        numbered_list=build_grouping_numbered_list(raw_tracks)
-    )
+    # Separate tracks into local (to group) and global (to bypass)
+    local_indices = []
+    global_indices = []
+    
+    for i, track in enumerate(raw_tracks):
+        if track.kind in ("music", "ambience"):
+            global_indices.append(i)
+        else:
+            local_indices.append(i)
+            
+    local_tracks = [raw_tracks[i] for i in local_indices]
+
+    groups: list[TrackGroup] = []
     warnings = list(state.get("warnings", []))
+    
+    # 1. Bypass Global Tracks (singleton groups)
+    for pos, g_idx in enumerate(global_indices):
+        track = raw_tracks[g_idx]
+        groups.append(
+            TrackGroup(
+                group_id=f"g_global_{pos}",
+                canonical_description=track.description,
+                member_ids=[track.track_id],
+                vlm_verified=True, # Bypass VLM verify since they are singletons
+            )
+        )
+
+    # 2. Group Local Tracks
+    if not local_tracks:
+         updates: dict[str, object] = {
+            "text_groups": groups,
+            "final_groups": groups,
+            "progress_messages": append_state_message(
+                state,
+                "progress_messages",
+                f"Skipped text grouping. Only {len(global_indices)} global tracks bypassed.",
+            ),
+        }
+         return updates
+
+    resolved_prompt = resolve_prompt("grouping").render(
+        numbered_list=build_grouping_numbered_list(local_tracks)
+    )
 
     try:
         response = invoke_structured_text(
@@ -66,29 +105,31 @@ def group_tracks(
             f"Text grouping failed; falling back to singleton groups. Reason: {exc}"
         )
 
-    index_groups = _parse_grouping_response(response, len(raw_tracks))
+    index_groups = _parse_grouping_response(response, len(local_tracks))
     canonical_map = _extract_canonical_indices(response, index_groups)
 
-    groups: list[TrackGroup] = []
-    for position, member_indices in enumerate(index_groups):
-        canonical_index = canonical_map.get(position, member_indices[0])
-        canonical_description = raw_tracks[canonical_index].description
+    global_offset = len(groups)
+    
+    for position, member_local_indices in enumerate(index_groups):
+        canonical_local_index = canonical_map.get(position, member_local_indices[0])
+        canonical_description = local_tracks[canonical_local_index].description
         groups.append(
             TrackGroup(
-                group_id=f"g{position}",
+                group_id=f"g{global_offset + position}",
                 canonical_description=canonical_description,
-                member_ids=[raw_tracks[index].track_id for index in member_indices],
+                member_ids=[local_tracks[i].track_id for i in member_local_indices],
                 vlm_verified=False,
             )
         )
 
-    updates: dict[str, object] = {
+    updates = {
         "text_groups": groups,
         "final_groups": groups,
         "progress_messages": append_state_message(
             state,
             "progress_messages",
-            f"Grouped {len(raw_tracks)} raw tracks into {len(groups)} text groups.",
+            f"Grouped {len(local_tracks)} local tracks into {len(groups) - global_offset} text groups. "
+            f"Bypassed {len(global_indices)} global tracks.",
         ),
     }
     if warnings != state.get("warnings", []):

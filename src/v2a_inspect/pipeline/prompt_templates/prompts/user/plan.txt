@@ -1,0 +1,25 @@
+== DIRECTOR'S INTENT ==
+Genre: {genre}
+Overall mood: {overall_mood}
+Audio direction: {audio_direction}
+
+Emotional arc:
+{emotional_arc_text}
+
+== LOCAL TRACKS (dialogue / sfx — with grouping and pan) ==
+{local_tracks_text}
+
+== GLOBAL TRACKS (music / ambience) ==
+{global_tracks_text}
+
+Build the unified AudioPlan. Map every track above to an AudioPlanItem.
+Set `intensity` based on the emotional beat each item falls within.
+Set `volume` based on the sound type (foreground dialogue/SFX should be loud ~1.0, background subtle).
+Set pan from the local track pan values (global tracks → pan = 0.0).
+
+Remember the [CRITICAL] rule for the `description` field: format MUST vary by track type.
+Write the final, highly detailed text prompt for the audio generation API:
+- Music: Natural musical description (genre, mood, tempo, lead instruments).
+- SFX/Ambience: Natural physical/acoustic description. NO emotional words.
+- Dialogue: [Voice Profile] + exact script text.
+- Silence: Dramatic intent or cinematic purpose of the pause.

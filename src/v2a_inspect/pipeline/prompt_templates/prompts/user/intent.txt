@@ -1,0 +1,11 @@
+Watch this video carefully from start to finish.
+
+Then answer: what should the AUDIENCE FEEL during each moment of this video?
+
+Output:
+- `genre`: one to two words (e.g. "psychological thriller", "action drama")
+- `overall_mood`: 2-5 adjectives for the total atmosphere
+- `emotional_arc`: a sequence of EmotionalBeat objects covering the full runtime
+- `audio_direction`: specific guidance for the sound designer, written as directives
+
+Remember: describe INTENDED EMOTIONS and AUDIO STRATEGY, not visual content.

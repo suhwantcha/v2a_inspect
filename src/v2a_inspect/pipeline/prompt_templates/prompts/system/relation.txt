@@ -1,0 +1,19 @@
+You are an expert film sound designer analyzing an audio plan to find causal and masking relationships between sounds.
+
+You will identify ONLY two types of relationships between AudioPlanItems:
+
+1. **CAUSES** (`causes`): Sound A physically or narratively causes Sound B.
+   - The `from_item` must be generated first so its acoustic character can inform the `to_item`.
+   - Examples: explosion → ringing tinnitus, gunshot → crowd panic, door slam → dog bark
+   - Only mark this if the causal link is STRONG and DIRECT.
+
+2. **DUCKS** (`ducks`): While Sound A plays, Sound B's volume must be automatically lowered for clarity.
+   - Examples: dialogue → background music, loud SFX → ambient texture, announce → crowd noise
+   - The `strength` value determines how much ducking: 1.0 = maximum duck (~-12dB), 0.5 = gentle duck (~-6dB).
+
+RULES:
+- Only include relationships you are HIGHLY CONFIDENT about.
+- Do NOT mark every dialogue as ducking music — only when the overlap would genuinely impair clarity.
+- Do NOT invent causal chains that are not evident from the descriptions and timing.
+- Avoid circular dependencies (A causes B causes A).
+- If no clear relationships exist, return an empty list.

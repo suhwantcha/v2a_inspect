@@ -25,10 +25,7 @@ def append_state_message(
     return [*state.get(key, []), message]
 
 
-def get_scene_analysis_prompt(options: InspectOptions) -> ResolvedPrompt:
-    if options.scene_analysis_mode == "extended":
-        return resolve_prompt("scene_analysis_extended")
-    return resolve_prompt("scene_analysis_default")
+
 
 
 def build_text_messages(prompt: ResolvedPrompt) -> list[BaseMessage]:

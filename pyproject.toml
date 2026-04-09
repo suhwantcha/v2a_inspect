@@ -28,6 +28,11 @@ dependencies = [
     "pyyaml>=6.0.2",
     "streamlit>=1.55.0",
     "streamlit-authenticator>=0.4.2",
+    "scipy>=1.17.1",
+    "numpy>=2.4.3",
+    "openai>=2.29.0",
+    "requests>=2.32.5",
+    "elevenlabs>=2.40.0",
 ]
 
 [project.scripts]

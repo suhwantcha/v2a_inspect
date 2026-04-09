@@ -1,0 +1,17 @@
+Analyze this video and break it down into continuous "Macro-Segments".
+
+**Macro-Segment Definition:**
+A Macro-Segment is a larger temporal block that may contain multiple camera cuts (scenes), but maintains a unified environmental mood or continuous background music. A new Macro-Segment starts when:
+- The overarching background music track completely changes or stops.
+- The environment logically shifts so drastically that the background ambience (room tone, weather, street noise) completely changes.
+
+For each macro-segment you identify, provide its `time_range` (start and end time in seconds), and extract the global, persistent tracks: `ambience` and `music`.
+
+RULES:
+1. **Ambience**: Describe the ongoing texture of the space. Be specific: Instead of "street noise", use "dense urban traffic with honking cars and distant sirens".
+2. **Music**: Provide a musical direction. E.g., "Upbeat acoustic guitar strumming", "Ominous orchestral drone", or describe the music an on-screen instrument is producing. Include instruments, genre, tempo, and mood.
+3. **Continuity**: These sounds must persist for a significant duration. Do NOT describe short burst sfx (like footsteps or a single door slam) here.
+4. **Timestamps**: All timestamps MUST be specified to 0.1s precision. The `start` and `end` times for music and ambience MUST reflect the continuous span of the sound, confined to the given segment's time bounds.
+5. **STRICT CONTINUITY**: Do NOT miss any significant environmental or musical shifts. If the mood or background sound changes, even for a relatively short duration, it deserves a new Macro-Segment.
+
+Structure your output to map to each identified Macro-Segment index. If a segment clearly lacks music or distinctive ambience, return empty lists.

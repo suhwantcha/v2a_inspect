@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>V2A Inspect — {{ video_id }}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8f9fa; color: #212529; line-height: 1.5; padding: 20px; }
+  .container { max-width: 1400px; margin: 0 auto; }
+  h1 { font-size: 1.6rem; margin-bottom: 8px; }
+  h2 { font-size: 1.3rem; margin: 24px 0 12px; border-bottom: 2px solid #dee2e6; padding-bottom: 6px; }
+  h3 { font-size: 1.1rem; margin: 16px 0 8px; }
+  .meta { color: #6c757d; font-size: 0.85rem; margin-bottom: 16px; }
+  .meta span { margin-right: 16px; }
+
+  /* Navigation */
+  nav { background: #fff; border: 1px solid #dee2e6; border-radius: 8px; padding: 12px 16px; margin-bottom: 24px; }
+  nav a { color: #0d6efd; text-decoration: none; margin-right: 16px; font-size: 0.9rem; }
+  nav a:hover { text-decoration: underline; }
+  nav a.active { font-weight: 700; color: #212529; }
+
+  /* Scene comparison */
+  .scene-block { margin: 12px 0; padding: 12px; background: #fff; border: 1px solid #dee2e6; border-radius: 6px; }
+  .scene-header { font-weight: 600; color: #495057; margin-bottom: 8px; }
+  .scene-content { display: flex; gap: 12px; align-items: flex-start; }
+  .scene-text { flex: 1; }
+  .scene-video { flex-shrink: 0; }
+  .scene-video video { width: 200px; border-radius: 4px; }
+
+  .event { margin: 2px 0; padding-left: 8px; border-left: 2px solid #adb5bd; margin-bottom: 12px;}
+  
+  /* Group blocks */
+  .card { background: #fff; border: 1px solid #dee2e6; border-radius: 8px; padding: 16px; margin-bottom: 16px; margin-top:24px;}
+  .card-header { font-weight: 600; font-size: 1rem; margin-bottom: 8px; }
+  .group-block { padding: 12px 0; border-bottom: 1px solid #e9ecef; }
+  .group-block:last-child { border-bottom: none; }
+  .group-block.group-bg { background: #e9ecef; border-radius: 6px; padding: 12px; margin: 4px 0; }
+  .group-header { margin-bottom: 8px; }
+  .group-clip-list { margin-top: 8px; }
+  .group-clip-row { display: flex; align-items: flex-start; gap: 12px; padding: 6px 0; border-top: 1px solid #f1f3f5; }
+  .group-clip-row:first-child { border-top: none; }
+  .group-clip-index { width: 24px; flex-shrink: 0; font-weight: 600; color: #868e96; font-size: 0.85rem; padding-top: 4px; }
+  .group-clip-video { flex-shrink: 0; }
+  .group-clip-video video { width: 180px; border-radius: 4px; }
+  .group-clip-desc { flex: 1; font-size: 0.83rem; color: #212529; padding-top: 4px; line-height: 1.5; }
+
+  /* Group tags */
+  .group-tag { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 0.72rem; font-weight: 600; background: #e9ecef; color: #495057; margin-left: 4px; vertical-align: middle; }
+  .group-tag.verified { background: #d4edda; color: #155724; }
+  
+  /* Badge for kind */
+  .badge { display: inline-block; padding: 1px 4px; border-radius: 3px; font-size: 0.7em; font-weight: bold; text-transform: uppercase; margin-right: 4px; vertical-align: middle; }
+  .badge-dialogue { background: #e3f2fd; color: #0d47a1; }
+  .badge-sfx { background: #fce4ec; color: #880e4f; }
+  .badge-music { background: #e8f5e9; color: #1b5e20; }
+  .badge-ambience { background: #fff3e0; color: #e65100; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>📹 {{ video_id }}</h1>
+<div class="meta">
+  <span>🎬 4-Track Extracted</span>
+  <span>{{ scene_analysis.total_duration }}s</span>
+</div>
+
+<nav>
+  <a href="../index.html">대시보드</a>
+  <a href="{{ video_id }}.html" class="active">{{ video_id }}</a>
+</nav>
+
+<!-- Scenes Section -->
+{% for scene in scene_analysis.scenes %}
+<div class="scene-block">
+  <div class="scene-header">
+    Scene {{ scene.scene_index }} ({{ scene.time_range.start }}s — {{ scene.time_range.end }}s)
+  </div>
+  <div class="scene-content">
+    <div class="scene-text">
+        
+      {% set content_found = false %}
+      {% for track in data.raw_tracks %}
+        {% if track.scene_index == scene.scene_index %}
+          {% set content_found = true %}
+          <div class="event">
+            <span class="badge badge-{{ track.kind }}">{{ track.kind }}</span>
+            <strong>{{ track.description }}</strong>
+            
+            <span class="group-tag">{{ track.group_id }}</span>
+            
+            <br><span style="color:#868e96;">{{ track.start }}s - {{ track.end }}s</span>
+            <br><span style="color:#adb5bd;font-size:0.75rem;">track_id: {{ track.track_id }}</span>
+          </div>
+        {% endif %}
+      {% endfor %}
+      
+      {% if not content_found %}
+      <div style="color:#adb5bd;font-style:italic;">No events detected</div>
+      {% endif %}
+      
+    </div>
+    
+    <div class="scene-video">
+      <video controls src="../videos/{{ video_filename }}#t={{ scene.time_range.start }},{{ scene.time_range.end }}" poster=""></video>
+    </div>
+  </div>
+</div>
+{% endfor %}
+
+
+<!-- Group Section -->
+<div class="card">
+  <div class="card-header">🔗 Sound Groups</div>
+  
+  {% for group in data.groups %}
+  <div class="group-block {{ 'group-bg' if group.vlm_verified else '' }}">
+    <div class="group-header">
+      <span class="group-tag {{ 'verified' if group.vlm_verified else '' }}">{{ group.group_id }}{% if group.vlm_verified %} ✓{% endif %}</span>
+      <strong>{{ group.canonical_description }}</strong>
+      {% if group.model_selection %}
+        <br><span style="color:#8b5cf6;font-size:0.85rem;margin-left:8px;">[Model: {{ group.model_selection.selected_engine }}]</span>
+      {% endif %}
+    </div>
+    
+    <div class="group-clip-list">
+      {% for member_id in group.member_ids %}
+        {% set track = data.raw_tracks | selectattr('track_id', 'equalto', member_id) | first %}
+        {% if track %}
+        <div class="group-clip-row">
+          <div class="group-clip-index">{{ loop.index0 }}</div>
+          <div class="group-clip-video">
+            <video controls src="../videos/{{ video_filename }}#t={{ track.start }},{{ track.end }}"></video>
+            <div style="font-size:0.72rem;color:#6c757d;margin-top:2px;">{{ member_id }} ({{ track.start }}s–{{ track.end }}s)</div>
+          </div>
+          <div class="group-clip-desc">
+            {{ track.description }}
+          </div>
+        </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+</div>
+</body>
+</html>

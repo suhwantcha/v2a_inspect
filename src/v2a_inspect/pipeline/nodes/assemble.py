@@ -26,14 +26,30 @@ def assemble_grouped_analysis(state: InspectState) -> dict[str, object]:
             track_to_canonical[track_id] = group.canonical_description
 
     annotated_scene_analysis = scene_analysis.model_copy(deep=True)
+    
+    # Annotate Local Scenes
     for scene in annotated_scene_analysis.scenes:
         scene_index = scene.scene_index
-        background_track_id = f"s{scene_index}_bg"
-        scene.background_group_id = track_to_group.get(background_track_id)
-        scene.background_canonical = track_to_canonical.get(background_track_id)
+        for idx, obj in enumerate(scene.dialogues):
+            track_id = f"s{scene_index}_dlg{idx}"
+            obj.group_id = track_to_group.get(track_id)
+            obj.canonical_description = track_to_canonical.get(track_id)
+            
+        for idx, obj in enumerate(scene.sfx):
+            track_id = f"s{scene_index}_sfx{idx}"
+            obj.group_id = track_to_group.get(track_id)
+            obj.canonical_description = track_to_canonical.get(track_id)
 
-        for object_index, obj in enumerate(scene.objects):
-            track_id = f"s{scene_index}_obj{object_index}"
+    # Annotate Macro Segments
+    for segment in annotated_scene_analysis.macro_segments:
+        segment_index = segment.segment_index
+        for idx, obj in enumerate(segment.music):
+            track_id = f"s{segment_index}_mus{idx}"
+            obj.group_id = track_to_group.get(track_id)
+            obj.canonical_description = track_to_canonical.get(track_id)
+            
+        for idx, obj in enumerate(segment.ambience):
+            track_id = f"s{segment_index}_amb{idx}"
             obj.group_id = track_to_group.get(track_id)
             obj.canonical_description = track_to_canonical.get(track_id)
 

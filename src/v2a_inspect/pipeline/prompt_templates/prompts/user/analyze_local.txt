@@ -1,0 +1,22 @@
+Analyze this video and break it down into distinct scenes.
+
+**Scene Definition:**
+A new scene starts when ONE OR MORE of these occur:
+- Complete scene transition (location change, fade, cut to different setting)
+- Main subject/object changes (e.g., from person to car, from indoor to outdoor)
+- Camera angle/composition drastically changes (e.g., wide shot to close-up, front view to side view)
+
+For each scene you identify, provide its `time_range` (start and end time in seconds), and extract the precise local track events: `dialogues` and `sfx`.
+
+RULES:
+1. **Be Extremely Specific**: Do not write "a person walking". Write "Heavy boots crunching on gravel rhythmically". Describe the TEXTURE, INTENSITY, and MATERIAL.
+2. **Include Counts**: Always specify how many entities are making the sound (e.g. "2 swords clashing", "1 dog barking").
+3. **Vocal vs Speech**: 
+    - If someone is speaking actual words, put it in `dialogue` and use quotes: `"Hello there"`.
+    - For ANY non-verbal sounds (grunts, sighs, laughter, screaming, dog barking, etc.), put it in `sfx` and describe the texture: "Rough male grunt of pain", "Soft feminine giggle".
+4. **Pinpoint Timestamps**: All timestamps MUST be specified to 0.1s precision. The `start` and `end` times for dialogues and sfx MUST tightly match the visual event, and MUST fall entirely within their scene's time_range.
+5. **Ignore the Background**: Do not extract background hums, wind, room tone, or BGM. Focus only on discrete, visible sound events that belong to dialogues or sfx.
+6. **Pan Position**: For each sound, estimate the horizontal on-screen position of the sound source and set `pan`: -1.0 = hard left edge of frame, 0.0 = center, 1.0 = hard right edge. Use 0.0 if uncertain.
+19. **STRICT CONTINUITY**: Do NOT consolidate short scenes. Every camera cut, no matter how brief, MUST be represented as a new scene entry in your output. You must be exhaustive in identifying ALL scene transitions.
+
+Structure your output to map to each identified Scene index. If a scene has no visible dialogue or SFX, return empty lists for those fields.

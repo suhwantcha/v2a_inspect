@@ -1,0 +1,12 @@
+Below is the unified audio plan for this video. Each item has:
+- `item_id`: unique identifier
+- `type`: sfx / music / ambience / dialogue / silence
+- `time`: [start, end] in seconds
+- `description`: what sound this is
+
+Analyze the relationships between these items and output `causes` and `ducks` edges.
+
+== AUDIO PLAN ==
+{plan_items_text}
+
+Identify causal and ducking relationships. Return only high-confidence relations.

@@ -18,17 +18,23 @@ from .utils import _get_prompt_parts
 PromptName = Literal[
     "grouping",
     "model_select",
-    "scene_analysis_default",
-    "scene_analysis_extended",
+    "analyze_local",
+    "analyze_global",
     "vlm_verify",
+    "intent",
+    "plan",
+    "relation",
 ]
 
 PROMPT_NAMES: tuple[PromptName, ...] = (
     "grouping",
     "model_select",
-    "scene_analysis_default",
-    "scene_analysis_extended",
+    "analyze_local",
+    "analyze_global",
     "vlm_verify",
+    "intent",
+    "plan",
+    "relation",
 )
 
 

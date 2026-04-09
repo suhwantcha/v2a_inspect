@@ -23,12 +23,13 @@ class RawTrack(BaseModel):
 
     track_id: str  # e.g. "s0_bg", "s0_obj0", "s1_obj1"
     scene_index: int
-    kind: Literal["background", "object"]
+    kind: Literal["dialogue", "sfx", "music", "ambience"]
     description: str
     start: float
     end: float
-    obj_index: Optional[int] = None  # None for backgrounds
-    n_scene_objects: int = 0  # number of object tracks in the same scene
+    obj_index: Optional[int] = None  # None for singletons if applicable
+    n_scene_objects: int = 0  # number of identical-kind tracks in the same scene/segment
+    pan: float = 0.0  # Stereo pan: -1.0 to 1.0
     model_selection: Optional[ModelSelection] = None  # assigned post-grouping
 
     @property
@@ -37,10 +38,10 @@ class RawTrack(BaseModel):
 
     @classmethod
     def validate_track_id(cls, track_id: str) -> str:
-        pattern = r"^s\d+_(bg|obj\d+)$"
+        pattern = r"^s\d+_(dlg|sfx|mus|amb)\d*$"
         if not re.match(pattern, track_id):
             raise ValueError(
-                f"Invalid track_id format: '{track_id}'. Expected format 's{{scene_index}}_{{bg|obj{{obj_index}}}}', e.g. 's0_bg', 's1_obj0'."
+                f"Invalid track_id format: '{track_id}'. Expected format 's{{index}}_{{kind}}{{obj_index}}', e.g. 's0_amb', 's1_sfx0'."
             )
         return track_id
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextlib import nullcontext
 from pathlib import Path
-from typing import Any, Callable, Literal, cast
+from typing import Any, Callable, Literal, Sequence, cast
 
 from langfuse import propagate_attributes
 
@@ -36,13 +36,42 @@ def run_inspect(
     progress_callback: ProgressCallback | None = None,
     warning_callback: ProgressCallback | None = None,
     trace_context: WorkflowTraceContext | None = None,
+    interrupt_after: Sequence[str] | None = None,
+    interrupt_before: Sequence[str] | None = None,
 ) -> InspectState:
-    """Run the full inspect workflow for a video path."""
+    """Run the inspect workflow for a video path with optional early interruption."""
 
     resolved_options = options or InspectOptions()
     initial_state = build_initial_inspect_state(video_path, options=resolved_options)
     return _run_workflow(
         initial_state,
+        runtime=runtime,
+        graph=graph,
+        options=resolved_options,
+        progress_callback=progress_callback,
+        warning_callback=warning_callback,
+        trace_context=trace_context,
+        interrupt_after=interrupt_after,
+        interrupt_before=interrupt_before,
+    )
+
+
+def run_synthesis(
+    state: InspectState,
+    *,
+    options: InspectOptions | None = None,
+    runtime: InspectRuntime | None = None,
+    graph: CompiledStateGraph | None = None,
+    progress_callback: ProgressCallback | None = None,
+    warning_callback: ProgressCallback | None = None,
+    trace_context: WorkflowTraceContext | None = None,
+) -> InspectState:
+    """Run the audio generation and video mixing stage from an existing state."""
+
+    resolved_options = options or InspectOptions()
+    # Resume from current state
+    return _run_workflow(
+        state,
         runtime=runtime,
         graph=graph,
         options=resolved_options,
@@ -102,8 +131,13 @@ def _run_workflow(
     progress_callback: ProgressCallback | None,
     warning_callback: ProgressCallback | None,
     trace_context: WorkflowTraceContext | None,
+    interrupt_after: Sequence[str] | None = None,
+    interrupt_before: Sequence[str] | None = None,
 ) -> InspectState:
-    resolved_graph = graph or build_inspect_graph()
+    resolved_graph = graph or build_inspect_graph(
+        interrupt_after=interrupt_after,
+        interrupt_before=interrupt_before,
+    )
     graph_runner = cast(Any, resolved_graph)
     resolved_runtime = runtime or build_inspect_runtime(
         model=options.gemini_model,

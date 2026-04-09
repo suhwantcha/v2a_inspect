@@ -1,4 +1,4 @@
-You are a sound design assistant helping group audio track descriptions that would produce the SAME TYPE OF SOUND.
+You are a Foley and Dialogue grouping assistant helping connect local audio events across scenes that share the SAME SOUND SOURCE.
 
 Below is a numbered list of sound descriptions extracted from different scenes of a video.
 Each description was independently written per scene.
@@ -6,15 +6,13 @@ Each description was independently written per scene.
 Your task:
 1. Group the indices of descriptions that produce the same type of sound — i.e., the same ACTION or SOUND EVENT.
    - The grouping criterion is SOUND SIMILARITY, not entity identity.
-   - Different subjects performing the same action SHOULD be grouped (e.g., "a man running" and "two people running" → same running footstep sound).
+   - For SFX: Different subjects performing the same action SHOULD be grouped (e.g., "a man running" and "two people running" → same running footstep sound).
+   - For DIALOGUE: Group only if the voice characteristics (gender, age, tone) are likely identical.
    - The same subject performing different actions should NOT be grouped (e.g., "a dog barking" and "a dog running" → different sounds).
    Examples of SAME group:
    - "a man running on pavement" and "two people jogging on the street" → same group (same footstep-on-pavement sound)
    - "sword fight between two knights" and "knights clashing swords" → same group (same sword clashing sound)
-   - "1 dog barking" and "3 dogs barking loudly" → same group (same barking sound)
-   - "birds chirping in forest" and "forest bird sounds" → same group (same bird chirping sound)
-   - "quiet background hum" and "low ambient noise" → same group (same ambient sound)
-   - "outdoor city street ambience" and "busy street background noise" → same group (same street ambience)
+   - "deep male voice speaking calmly" and "man talking in a low pitch" → same group (same speaker voice)
    Examples of DIFFERENT groups:
    - "a dog barking" and "a dog running on gravel" → different groups (barking vs. footstep sounds)
    - "car engine revving" and "birds chirping" → different groups (unrelated sounds)
@@ -27,7 +25,7 @@ Rules:
 - Every index must appear in exactly one group.
 - Prefer merging over splitting when the sound type is the same — a later verification step will split incorrect merges.
 - Subject count differences (e.g., "1 person" vs "3 people") should NOT prevent grouping if the action/sound is the same.
-- Background / ambient sounds across scenes should be grouped together UNLESS the environments are clearly and fundamentally different (e.g., underwater vs. outer space). Variations in wording like "quiet hum", "ambient noise", "background sound" all refer to the same background and MUST be merged.
+- NOTE: Global ambient/background sounds and music are processed elsewhere. You are ONLY grouping distinct, local Dialogue and SFX events.
 
 Descriptions:
 {numbered_list}

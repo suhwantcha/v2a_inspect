@@ -38,10 +38,13 @@ class Settings(BaseSettings):
     ui_analysis_acquire_timeout_seconds: int = Field(default=120, ge=1)
     ui_temp_cleanup_max_age_seconds: int = Field(default=3600, ge=1)
     ui_cleanup_interval_seconds: int = Field(default=1800, ge=1)
+    openai_api_key: SecretStr | None = None
+    elevenlabs_api_key: SecretStr | None = None
 
     model_config = SettingsConfigDict(
         env_file=(".env", ".env.secure"),
         env_file_encoding="utf-8",
+        extra="ignore",
     )
 
     @classmethod

@@ -5,13 +5,24 @@ from .gemini import (
     ModelSelectSegmentResponse,
     VLMVerifyResponse,
 )
-from .scenes import Scene, SceneObject, TimeRange, VideoSceneAnalysis
+from .plan import (
+    AudioPlan,
+    AudioPlanItem,
+    AudioRelation,
+    DirectorIntent,
+    EmotionalBeat,
+    EvaluationScore,
+    LLMRelationResponse,
+    RelationGraph,
+)
+from .scenes import LocalScene, MacroSegment, SceneObject, TimeRange, VideoSceneAnalysis
 from .tracks import GroupedAnalysis, ModelSelection, RawTrack, TrackGroup
 
 __all__ = [
     "TimeRange",
     "SceneObject",
-    "Scene",
+    "LocalScene",
+    "MacroSegment",
     "VideoSceneAnalysis",
     "GroupingResponseGroup",
     "GroupingResponse",
@@ -22,4 +33,13 @@ __all__ = [
     "RawTrack",
     "TrackGroup",
     "GroupedAnalysis",
+    # plan.py
+    "EmotionalBeat",
+    "DirectorIntent",
+    "AudioPlanItem",
+    "AudioPlan",
+    "AudioRelation",
+    "LLMRelationResponse",
+    "RelationGraph",
+    "EvaluationScore",
 ]
