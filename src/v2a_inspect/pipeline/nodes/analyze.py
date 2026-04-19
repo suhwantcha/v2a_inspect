@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from langchain_core.language_models import BaseChatModel
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, Field
@@ -66,8 +67,9 @@ def analyze_scenes(
 
     intent_prefix = _build_intent_prefix(state)
 
-    # 1. Local Track Analysis (Dialogue, SFX) per Scene
+    # 1. Build prompts (with optional intent prefix)
     prompt_local = resolve_prompt("analyze_local")
+    prompt_global = resolve_prompt("analyze_global")
     if intent_prefix:
         prompt_local = ResolvedPrompt(
             name=prompt_local.name,
@@ -76,23 +78,6 @@ def analyze_scenes(
             source=prompt_local.source,
             langfuse_prompt=prompt_local.langfuse_prompt,
         )
-
-    local_analysis = invoke_structured_video(
-        llm,
-        file_obj=gemini_file,
-        fps=options.fps,
-        prompt=prompt_local,
-        schema=_LocalAnalysisResult,
-        model=options.gemini_model,
-        timeout_ms=options.video_timeout_ms,
-        max_retries=options.max_retries,
-        label="analyze_local_tracks",
-        config=config,
-    )
-
-    # 2. Global Track Analysis (Music, Ambience) per Macro-Segment
-    prompt_global = resolve_prompt("analyze_global")
-    if intent_prefix:
         prompt_global = ResolvedPrompt(
             name=prompt_global.name,
             system_text=intent_prefix + prompt_global.system_text,
@@ -101,18 +86,40 @@ def analyze_scenes(
             langfuse_prompt=prompt_global.langfuse_prompt,
         )
 
-    global_analysis = invoke_structured_video(
-        llm,
-        file_obj=gemini_file,
-        fps=options.fps,
-        prompt=prompt_global,
-        schema=_GlobalAnalysisResult,
-        model=options.gemini_model,
-        timeout_ms=options.video_timeout_ms,
-        max_retries=options.max_retries,
-        label="analyze_global_tracks",
-        config=config,
-    )
+    # 2. Run Local & Global analysis in parallel (each is a blocking Gemini API call)
+    def _run_local() -> _LocalAnalysisResult:
+        return invoke_structured_video(
+            llm,
+            file_obj=gemini_file,
+            fps=options.fps,
+            prompt=prompt_local,
+            schema=_LocalAnalysisResult,
+            model=options.gemini_model,
+            timeout_ms=options.video_timeout_ms,
+            max_retries=options.max_retries,
+            label="analyze_local_tracks",
+            config=config,
+        )
+
+    def _run_global() -> _GlobalAnalysisResult:
+        return invoke_structured_video(
+            llm,
+            file_obj=gemini_file,
+            fps=options.fps,
+            prompt=prompt_global,
+            schema=_GlobalAnalysisResult,
+            model=options.gemini_model,
+            timeout_ms=options.video_timeout_ms,
+            max_retries=options.max_retries,
+            label="analyze_global_tracks",
+            config=config,
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        future_local = executor.submit(_run_local)
+        future_global = executor.submit(_run_global)
+        local_analysis = future_local.result()
+        global_analysis = future_global.result()
 
     # Merging the two analysis branches into the final schema
     scene_analysis = VideoSceneAnalysis(
